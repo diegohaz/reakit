@@ -6,6 +6,12 @@ import { isPlainObject, normalizePropsAreEqual } from "reakit-utils";
 import { forwardRef } from "./__utils/forwardRef";
 import { useCreateElement as defaultUseCreateElement } from "./useCreateElement";
 import { memo } from "./__utils/memo";
+import {
+  StateContext,
+  withStateContextSubscriber,
+  StateContextListener,
+  StateContextSubscribe,
+} from "./withStateContextSubscriber";
 
 type RoleHTMLProps = React.HTMLAttributes<any> &
   React.RefAttributes<any> & {
@@ -23,6 +29,8 @@ type Options<T extends As, O> = {
   useHook?: Hook<O>;
   keys?: ReadonlyArray<any>;
   memo?: boolean;
+  context?: StateContext<O>;
+  isContextProvider?: boolean;
   propsAreEqual?: (prev: O, next: O) => boolean;
   useCreateElement?: (
     type: T,
@@ -56,6 +64,8 @@ export function createComponent<T extends As, O>({
   as: type,
   useHook,
   memo: shouldMemo,
+  context,
+  isContextProvider = false,
   propsAreEqual = useHook?.unstable_propsAreEqual,
   keys = useHook?.__keys || [],
   useCreateElement = defaultUseCreateElement,
@@ -64,8 +74,13 @@ export function createComponent<T extends As, O>({
     { as = type, ...props }: PropsWithAs<O, T>,
     ref: React.Ref<T>
   ) => {
+    const initialState = React.useRef<O>();
+
     if (useHook) {
       const [options, htmlProps] = splitProps(props, keys);
+      if (!initialState.current) {
+        initialState.current = options;
+      }
       const { wrapElement, ...elementProps } = useHook(options, {
         ref,
         ...htmlProps,
@@ -83,7 +98,35 @@ export function createComponent<T extends As, O>({
           : asOptions
           ? { ...elementProps, ...asOptions }
           : elementProps;
-      const element = useCreateElement(as, allProps as typeof props);
+
+      let element = useCreateElement(as, allProps as typeof props);
+      if (context && isContextProvider) {
+        if (isContextProvider) {
+          const listenersRef = React.useRef(new Set<StateContextListener<O>>());
+
+          const subscribe: StateContextSubscribe<O> = React.useCallback(
+            (listener: StateContextListener<O>) => {
+              listenersRef.current.add(listener);
+              return () => listenersRef.current.delete(listener);
+            },
+            []
+          );
+
+          React.useEffect(() => {
+            for (const listener of listenersRef.current) {
+              listener(options);
+            }
+          }, [options]);
+
+          const value = React.useMemo(
+            () => ({ initialState: initialState.current as O, subscribe }),
+            [initialState.current, subscribe]
+          );
+
+          element = React.createElement(context.Provider, { value }, element);
+        }
+      }
+
       if (wrapElement) {
         return wrapElement(element);
       }
@@ -97,6 +140,10 @@ export function createComponent<T extends As, O>({
   }
 
   Comp = forwardRef(Comp);
+
+  if (context && !isContextProvider) {
+    Comp = withStateContextSubscriber(Comp, context);
+  }
 
   if (shouldMemo) {
     Comp = memo(Comp, propsAreEqual && normalizePropsAreEqual(propsAreEqual));
