@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useFocusVisible } from "@react-aria/interactions";
 import { createComponent } from "reakit-system/createComponent";
 import { createHook } from "reakit-system/createHook";
 import { useForkRef } from "reakit-utils/useForkRef";
@@ -8,6 +9,7 @@ import { warning } from "reakit-warning";
 import { hasFocusWithin } from "reakit-utils/hasFocusWithin";
 import { isButton } from "reakit-utils/isButton";
 import { isPortalEvent } from "reakit-utils/isPortalEvent";
+import { isTextField } from "reakit-utils/isTextField";
 import { getActiveElement } from "reakit-utils/getActiveElement";
 import { isUA } from "reakit-utils/dom";
 import { getClosestFocusable } from "reakit-utils/tabbable";
@@ -25,6 +27,10 @@ export type TabbableOptions = RoleOptions & {
    * `aria-disabled` will be set.
    */
   focusable?: boolean;
+  /**
+   * Do something only when focused via keyboard, similar to the :focus-visible pseudo class.
+   */
+  onFocusVisible?: (event: React.FocusEvent) => void;
 };
 
 export type TabbableHTMLProps = RoleHTMLProps & {
@@ -181,6 +187,7 @@ export const useTabbable = createHook<TabbableOptions, TabbableHTMLProps>({
       ref: htmlRef,
       tabIndex: htmlTabIndex,
       onClickCapture: htmlOnClickCapture,
+      onFocus: htmlOnFocus,
       onMouseDownCapture: htmlOnMouseDownCapture,
       onMouseDown: htmlOnMouseDown,
       onKeyPressCapture: htmlOnKeyPressCapture,
@@ -190,16 +197,20 @@ export const useTabbable = createHook<TabbableOptions, TabbableHTMLProps>({
   ) {
     const ref = React.useRef<HTMLElement>(null);
     const onClickCaptureRef = useLiveRef(htmlOnClickCapture);
+    const onFocusRef = useLiveRef(htmlOnFocus);
+    const onFocusVisibleRef = useLiveRef(options.onFocusVisible);
     const onMouseDownCaptureRef = useLiveRef(htmlOnMouseDownCapture);
     const onMouseDownRef = useLiveRef(htmlOnMouseDown);
     const onKeyPressCaptureRef = useLiveRef(htmlOnKeyPressCapture);
     const trulyDisabled = !!options.disabled && !options.focusable;
     const [nativeTabbable, setNativeTabbable] = React.useState(true);
     const [supportsDisabled, setSupportsDisabled] = React.useState(true);
+    const [isTextInput, setIsTextInput] = React.useState(false);
     const style = options.disabled
       ? { pointerEvents: "none" as const, ...htmlStyle }
       : htmlStyle;
     const focusOnMouseDown = useFocusOnMouseDown();
+    const { isFocusVisible } = useFocusVisible({ isTextInput });
 
     useIsomorphicEffect(() => {
       const tabbable = ref.current;
@@ -217,9 +228,22 @@ export const useTabbable = createHook<TabbableOptions, TabbableHTMLProps>({
       if (!supportsDisabledAttribute(tabbable)) {
         setSupportsDisabled(false);
       }
+      if (isTextField(tabbable)) {
+        setIsTextInput(true);
+      }
     }, []);
 
     const onClickCapture = useDisableEvent(onClickCaptureRef, options.disabled);
+
+    const onFocus = React.useCallback(
+      (event: React.FocusEvent) => {
+        onFocusRef.current?.(event);
+        if (isFocusVisible) {
+          onFocusVisibleRef.current?.(event);
+        }
+      },
+      [isFocusVisible]
+    );
 
     const onMouseDownCapture = useDisableEvent(
       onMouseDownCaptureRef,
@@ -252,6 +276,7 @@ export const useTabbable = createHook<TabbableOptions, TabbableHTMLProps>({
       disabled: trulyDisabled && supportsDisabled ? true : undefined,
       "aria-disabled": options.disabled ? true : undefined,
       onClickCapture,
+      onFocus,
       onMouseDownCapture,
       onMouseDown,
       onKeyPressCapture,
