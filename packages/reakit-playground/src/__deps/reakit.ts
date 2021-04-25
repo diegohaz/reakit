@@ -2,6 +2,9 @@
 // Automatically generated
 export default {
   "reakit": require("reakit"),
+  "reakit/Alert": require("reakit/Alert"),
+  "reakit/Alert/Alert": require("reakit/Alert/Alert"),
+  "reakit/Alert/AlertState": require("reakit/Alert/AlertState"),
   "reakit/Box": require("reakit/Box"),
   "reakit/Box/Box": require("reakit/Box/Box"),
   "reakit/Button": require("reakit/Button"),
