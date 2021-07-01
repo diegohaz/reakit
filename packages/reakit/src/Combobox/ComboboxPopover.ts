@@ -3,6 +3,10 @@ import { createHook } from "reakit-system/createHook";
 import { useWarning } from "reakit-warning";
 import { useCreateElement } from "reakit-system/useCreateElement";
 import {
+  createStateContext,
+  useStateContextProvider,
+} from "reakit/StateContext";
+import {
   PopoverOptions,
   PopoverHTMLProps,
   usePopover,
@@ -14,13 +18,18 @@ import {
   unstable_useComboboxList as useComboboxList,
 } from "./ComboboxList";
 import { ComboboxPopoverStateReturn } from "./__utils/ComboboxPopoverState";
+import { unstable_ComboboxState } from "./ComboboxState";
+
+export const StateContext = createStateContext<
+  Partial<unstable_ComboboxState>
+>();
 
 export const unstable_useComboboxPopover = createHook<
   unstable_ComboboxPopoverOptions,
   unstable_ComboboxPopoverHTMLProps
 >({
   name: "ComboboxPopover",
-  compose: [useComboboxList, usePopover],
+  compose: [useStateContextProvider(StateContext), useComboboxList, usePopover],
   keys: COMBOBOX_POPOVER_KEYS,
 
   useOptions(options) {
@@ -33,8 +42,10 @@ export const unstable_useComboboxPopover = createHook<
   },
 
   useComposeProps(options, { tabIndex, ...htmlProps }) {
+    htmlProps = useStateContextProvider(StateContext)(options, htmlProps, true);
     htmlProps = useComboboxList(options, htmlProps, true);
     htmlProps = usePopover(options, htmlProps, true);
+
     return {
       ...htmlProps,
       tabIndex: tabIndex ?? undefined,
